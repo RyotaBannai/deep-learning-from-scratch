@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "deep-learning-from-scratch"
+version = "0.1.0"
+description = ""
+authors = ["RyotaBannai <ryotala0528@gmail.com>"]
+readme = "README.md"
+packages = [{ include = "deep_learning_from_scratch" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+black = "^25.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
