@@ -27,7 +27,7 @@ class SimpleConvNet:
 
     def __init__(
         self,
-        input_dim=(1, 28, 28),
+        input_dim=(1, 28, 28),  # channel, hight, width
         conv_param={"filter_num": 30, "filter_size": 5, "pad": 0, "stride": 1},
         hidden_size=100,
         output_size=10,
@@ -40,11 +40,10 @@ class SimpleConvNet:
         input_size = input_dim[1]
         conv_output_size = (
             input_size - filter_size + 2 * filter_pad
-        ) / filter_stride + 1
+        ) / filter_stride + 1  # p213 畳み込み層の出力サイズに関する計算。
         pool_output_size = int(
             filter_num * (conv_output_size / 2) * (conv_output_size / 2)
-        )
-
+        )  # プーリング層の出力サイズ。ここではフィルターの数は変化しない。また/2をしているのは、2x2のMaxプーリングを計算するため。プーリング幅とストライド幅は同じにすることが多いため、プーリング幅で割った値がそのまま出力サイズと考えて良い。
         # 重みの初期化
         self.params = {}
         self.params["W1"] = weight_init_std * np.random.randn(
@@ -67,6 +66,7 @@ class SimpleConvNet:
             conv_param["pad"],
         )
         self.layers["Relu1"] = Relu()
+        # ↓pool_output_sizeで/2を前提にしているため、個々の引数も変数にする方が可読性が良いか。
         self.layers["Pool1"] = Pooling(pool_h=2, pool_w=2, stride=2)
         self.layers["Affine1"] = Affine(self.params["W2"], self.params["b2"])
         self.layers["Relu2"] = Relu()

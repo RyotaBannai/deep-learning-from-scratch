@@ -53,9 +53,17 @@ def im2col(input_data, filter_h, filter_w, stride=1, pad=0):
     col : 2次元配列
     """
     N, C, H, W = input_data.shape
+    # ↓p213 畳み込み層の出力サイズに関する計算。
     out_h = (H + 2 * pad - filter_h) // stride + 1
     out_w = (W + 2 * pad - filter_w) // stride + 1
 
+    """
+    np.pad の第2引数 [(0,0),(0,0),(pad,pad),(pad,pad)] は各軸ごとの前後パディング量を指定しています。
+    ここでは軸0（N）と軸1（C）にはパディングせず、軸2（高さ）と軸3（幅）に対してそれぞれ前後 pad ピクセルずつ追加します。
+    mode="constant" は定数で埋めることを意味し、デフォルトでは 0（ゼロパディング）になります。
+    結果として得られる img の形状は (N, C, H + 2pad, W + 2pad) になります。
+    目的は畳み込みの前処理で
+    """
     img = np.pad(input_data, [(0, 0), (0, 0), (pad, pad), (pad, pad)], "constant")
     col = np.zeros((N, C, filter_h, filter_w, out_h, out_w))
 
@@ -83,16 +91,38 @@ def col2im(col, input_shape, filter_h, filter_w, stride=1, pad=0):
 
     Returns
     -------
-
     """
     N, C, H, W = input_shape
     out_h = (H + 2 * pad - filter_h) // stride + 1
     out_w = (W + 2 * pad - filter_w) // stride + 1
+
+    # col.shape
+    #   軸1: フィルターの適用回数（データ数*畳み込み層の出力サイズのout_h*out_w）
+    #   軸2: フィルターの重みshape（channel*FH*FW）
+
+    # col.reshape後.shape
+    #   軸1: データ数
+    #   軸2: FH
+    #   軸3: FW
+    #   軸4: out_h
+    #   軸5: out_w
     col = col.reshape(N, out_h, out_w, C, filter_h, filter_w).transpose(
         0, 3, 4, 5, 1, 2
     )
 
-    img = np.zeros((N, C, H + 2 * pad + stride - 1, W + 2 * pad + stride - 1))
+    # img = np.zeros((N, C, H + 2 * pad + stride - 1, W + 2 * pad + stride - 1))
+    # 上記のようにstride-1はバッファー観点で入れている。
+    # 実際にはout_h,out_wは//strideでfloorしているため、H+2*pad,W+2*padだけ確保すればout of indexになることはない。
+    # 証明: y+(out_h-1)*stride <= (FH-1) + floor((H_p - FH) /stride)* stride <=(FH-1)+(H_p-HF)=H_p-1。つまり最大indexはH_p-1である。
+    # ※H_p=H+2*pad を表す。
+    # ※y+(out_h-1)*strideが最大indexアクセスになることの具体歴で証明：
+    #   y=0,H=8,pad=0,filter_h=3,stride=2,out_h=3（=(H+2*pad-filter_h)//stride+1）の時、y_max=0+3*2=6
+    #   slice y:y_max:2=[0,2,4]
+    #   最大のindexは4であるが、これは(out_h-1)*stride=2*2=4と一致（また、y_max-stride=6-2=4としても一致）。
+
+    # それでも一部実装が + stride - 1 を付けるのは、保守的なバッファ（境界条件に対する安全側の余裕）で、正しさのために必須だからではありません。また最後に [:, :, pad:H+pad, pad:W+pad] で必ずトリミングするので、余白は捨てられます。
+    # とはいえ、実装上はH+2*padで十分であり、想定外のバグが発生した場合にもバッファーで吸収する可能性もあるため、バッドプラクティスと思われる。
+    img = np.zeros((N, C, H + 2 * pad, W + 2 * pad))
     for y in range(filter_h):
         y_max = y + stride * out_h
         for x in range(filter_w):

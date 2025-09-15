@@ -222,13 +222,31 @@ class Convolution:
     def forward(self, x):
         FN, C, FH, FW = self.W.shape
         N, C, H, W = x.shape
+        # ↓p213 畳み込み層の出力サイズに関する計算。
         out_h = 1 + int((H + 2 * self.pad - FH) / self.stride)
         out_w = 1 + int((W + 2 * self.pad - FW) / self.stride)
 
+        # col.shape は2次元で
+        #   軸1: フィルターの適用回数（データ数*畳み込み層の出力サイズのout_h*out_w）
+        #   軸2: フィルターの重みshape（channel*FH*FW）こっちにchannelが入っているから軸1には入らない、と考える
         col = im2col(x, FH, FW, self.stride, self.pad)
-        col_W = self.W.reshape(FN, -1).T
 
+        # col_W.shape ※ 最後に転置
+        #   軸1: フィルターの重みshape（channel*FH*FW）
+        #   軸2: FN(フィルター数)
+        col_W = self.W.reshape(FN, -1).T
+        # なぜ１軸目がFNで、その後に転置するのか → 重みをそういうふうに定義しているため
+
+        # out.shape
+        #   軸1: フィルターの適用回数
+        #   軸2: FN(フィルター数)
         out = np.dot(col, col_W) + self.b
+
+        # out.shape
+        #   軸1: データ数
+        #   軸2: FN(フィルター数)
+        #   軸3: フィルター出力のheight
+        #   軸4: フィルター出力のwidth
         out = out.reshape(N, out_h, out_w, -1).transpose(0, 3, 1, 2)
 
         self.x = x
@@ -239,13 +257,39 @@ class Convolution:
 
     def backward(self, dout):
         FN, C, FH, FW = self.W.shape
+        # forward関数の中のoutのreshape.transpose前の形式に戻す。
+        # dout.shape
+        #   軸1: フィルターの適用回数
+        #   軸2: FN(フィルター数)
         dout = dout.transpose(0, 2, 3, 1).reshape(-1, FN)
 
         self.db = np.sum(dout, axis=0)
+
+        # 入力側（ここではcol）を転置。これはFC層と同じ。p149
+        # col.T
+        #   軸1: フィルターの重みshape（channel*FH*FW）
+        #   軸2: フィルターの適用回数
+        # dW.shape=(C*FH*FW, FN)
+        #   軸1: フィルターの重みshape（channel*FH*FW）
+        #   軸2: FN(フィルター数)
         self.dW = np.dot(self.col.T, dout)
+        # ↓このreshape後の形が、重みの定義と一致することに注意。
         self.dW = self.dW.transpose(1, 0).reshape(FN, C, FH, FW)
 
+        # 重み側（ここではcol_W）を転置。これはFC層と同じ。p149
+        # col_W.T.shape
+        #   軸1: FN(フィルター数)
+        #   軸2: フィルターの重みshape（channel*FH*FW）
+        # dcol.shape
+        #   軸1: フィルターの適用回数
+        #   軸2: フィルターの重みshape（channel*FH*FW）
         dcol = np.dot(dout, self.col_W.T)
+
+        # dx.shape（inputと同じ形式になっていないといけない）
+        #   軸1: データ数
+        #   軸2: channel
+        #   軸3: height
+        #   軸4: width
         dx = col2im(dcol, self.x.shape, FH, FW, self.stride, self.pad)
 
         return dx
